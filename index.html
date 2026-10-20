@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Temperaturkurve von Wasser im Teilchenmodell</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --card: #ffffff; --ink: #1f2328; --muted: #5f6670;
+    --line: #d9d4c8; --grid: #ebe7de; --glass: #8a95a3; --accent: #c2410c;
+    --ice: #4f9fd8; --melt: #7c6fd6; --water: #1f8a9e; --boil: #e08a1e; --steam: #c8423a;
+    --speed: #d9a400; --particle: #3d7fc1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --card: #1e2227; --ink: #e8e6e1; --muted: #a0a7b0;
+      --line: #343a42; --grid: #2a2f36; --glass: #9aa6b4;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15181c; --card: #1e2227; --ink: #e8e6e1; --muted: #a0a7b0;
+    --line: #343a42; --grid: #2a2f36; --glass: #9aa6b4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.35;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
+  h1 { margin: 0 0 2px; font-size: 1.4rem; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+
+  .view { display: grid; grid-template-columns: 1fr 420px 240px; gap: 14px; align-items: stretch; }
+  #graph { width: 100%; height: 470px; display: block; cursor: ew-resize; touch-action: none; }
+  #particles { width: 420px; height: 470px; display: block; }
+
+  .bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; height: 470px; }
+  .bar { display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 0; }
+  .bar .pct { font-size: .95rem; white-space: nowrap; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .bar .tube {
+    position: relative; flex: 1; width: 100%; border-radius: 10px;
+    background: var(--grid); border: 1px solid var(--line); overflow: hidden;
+  }
+  .bar .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; }
+  .bar.speed .fill { background: var(--speed); }
+  .bar.ice .fill { background: var(--ice); }
+  .bar.water .fill { background: var(--water); }
+  .bar.steam .fill { background: var(--steam); }
+  .bar .name { font-weight: 700; font-size: .85rem; text-align: center; line-height: 1.15; }
+  .bar.speed .tube { border: 2px solid var(--speed); }
+
+  .explain {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; align-items: center;
+    margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg);
+  }
+  .explain p { margin: 0; font-size: .98rem; }
+  .explain .phase { padding: 5px 12px; border-radius: 999px; font-weight: 700; color: #fff; font-size: .9rem; margin-right: 8px; white-space: nowrap; }
+  .indicators { display: grid; gap: 6px; font-size: .88rem; }
+  .ind { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .ind .lbl { color: var(--muted); min-width: 170px; }
+  .ind b { padding: 2px 10px; border-radius: 6px; }
+  .ind b.up { background: var(--speed); color: #1f2328; }
+  .ind b.same { background: var(--line); color: var(--ink); }
+
+  .bar-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  button {
+    padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-size: .95rem; font-weight: 600; cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 90px; }
+  .speedctl { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; }
+  .speedctl label { font-weight: 600; white-space: nowrap; }
+  .speedctl input { flex: 1; accent-color: var(--accent); }
+  .speedctl output { min-width: 56px; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 700; }
+  .stat { font-size: .8rem; color: var(--muted); }
+  .stat b { display: block; font-size: 1.1rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: .8rem; color: var(--muted); }
+  .legend i { display: inline-block; width: 16px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .hint { font-size: .8rem; color: var(--muted); }
+  .pwrap { position: relative; }
+  .keyrow { font-size: .88rem; color: var(--ink); }
+  .explain { grid-template-columns: auto 1fr auto; }
+  .legendbox { display: grid; gap: 5px; padding-left: 16px; border-left: 2px solid var(--line); }
+  .lgtitle { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .legendbox .keyrow { display: flex; align-items: center; gap: 8px; }
+  .keyrow svg { flex: none; }
+  .tstat { border: 3px solid #d62828; border-radius: 12px; padding: 4px 14px 6px; }
+  .tstat b { font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+  .tbadge {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 6px 18px 8px; border-radius: 14px; background: var(--card);
+    border: 3px solid var(--ice); box-shadow: 0 4px 14px rgba(0,0,0,.15); pointer-events: none;
+  }
+  .tbadge .tlabel { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+  .tbadge .tval { font-size: 2.6rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+  /* Tablet: Die gesamte Ansicht wird als Ganzes auf genau eine Bildschirmseite skaliert.
+     Layout und Inhalt bleiben unverändert. */
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-user-select: none; user-select: none;
+         -webkit-tap-highlight-color: transparent; }
+  .wrap { width: 1240px; max-width: none; position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  button, input { touch-action: manipulation; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Temperaturkurve von Wasser im Teilchenmodell</h1>
+  <p class="sub">300 g Eis bei −20 °C wird mit konstant 1000 W erhitzt. Rechts siehst du, was dabei mit den Wasserteilchen passiert.</p>
+
+  <div class="card">
+    <div class="view">
+      <div>
+        <canvas id="graph" aria-label="Temperatur-Zeit-Diagramm"></canvas>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="pwrap">
+        <canvas id="particles" aria-label="Teilchenmodell"></canvas>
+      </div>
+      <div class="bars">
+        <div class="bar speed"><div class="pct" id="pSpeed">–</div><div class="tube"><div class="fill" id="fSpeed"></div></div><div class="name">Teilchen-<br>bewegung</div></div>
+        <div class="bar ice"><div class="pct" id="pIce">0 %</div><div class="tube"><div class="fill" id="fIce"></div></div><div class="name">Eis</div></div>
+        <div class="bar water"><div class="pct" id="pWater">0 %</div><div class="tube"><div class="fill" id="fWater"></div></div><div class="name">Wasser</div></div>
+        <div class="bar steam"><div class="pct" id="pSteam">0 %</div><div class="tube"><div class="fill" id="fSteam"></div></div><div class="name">Dampf</div></div>
+      </div>
+    </div>
+
+    <div class="explain">
+      <p><span class="phase" id="phase"></span></p>
+      <div class="legendbox"><span class="lgtitle">Legende</span>
+          <div class="ind keyrow">
+          <svg width="74" height="20" viewBox="0 0 74 20" aria-hidden="true">
+            <line x1="17" y1="10" x2="57" y2="10" stroke="var(--muted)" stroke-width="2.5" stroke-dasharray="3 2.5"/>
+            <circle cx="9" cy="10" r="8" fill="var(--particle)"/><circle cx="65" cy="10" r="8" fill="var(--particle)"/>
+          </svg>
+          <span>gestrichelte Linie = Anziehungskraft zwischen zwei Teilchen</span>
+        </div>
+          <div class="ind keyrow">
+          <svg width="74" height="20" viewBox="0 0 74 20" aria-hidden="true"><circle cx="9" cy="10" r="8" fill="var(--particle)"/></svg>
+          <span>Kugel = ein Wasserteilchen</span>
+        </div>
+      </div>
+      <div class="indicators">
+        <div class="ind"><span class="lbl">Teilchenbewegung</span><b id="iSpeed"></b></div>
+      </div>
+    </div>
+
+    <div class="bar-row">
+      <button id="play" class="primary">Start</button>
+      <button id="reset">Zurücksetzen</button>
+      <div class="speedctl">
+        <label for="speed">Zeitraffer</label>
+        <input id="speed" type="range" min="0" max="100" step="1" value="26">
+        <output id="speedOut"></output>
+      </div>
+      <div class="stat tstat">Temperatur<b id="rT">–</b></div>
+      <div class="stat">Zeit<b id="rt">–</b></div>
+      <div class="stat">Zugeführte Energie<b id="rQ">–</b></div>
+      <span class="hint">Tipp: Im Diagramm ziehen, um vor- und zurückzuspulen.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- Physik ----------
+  const C_ICE = 2100, C_WATER = 4186, C_STEAM = 2010, L_F = 334000, L_V = 2256000;
+  const m = 0.3, P = 1000, T0 = -20, T_MAX = 110, Y_MIN = -40, Y_MAX = 120;
+
+  const PHASES = {
+    ice:   { label: 'Eis erwärmen',     color: '--ice',
+             text: 'Die Teilchen sitzen auf festen Plätzen und werden von Anziehungskräften zusammengehalten. Mit der zugeführten Energie schwingen sie immer schneller und weiter um ihre Plätze – die Temperatur steigt.',
+             speed: ['steigt', 'up'], dist: ['bleiben gleich, feste Plätze', 'same'] },
+    melt:  { label: 'Schmelzen (0 °C)', color: '--melt',
+             text: 'Die Temperatur bleibt bei 0 °C, die Teilchen werden also nicht schneller. Die Energie wird gebraucht, um die Anziehungskräfte zu überwinden: Teilchen lösen sich nach und nach von ihren festen Plätzen, die Ordnung geht verloren und die Abstände werden größer.',
+             speed: ['bleibt gleich', 'same'], dist: ['werden größer, Anziehung wird überwunden', 'up'] },
+    water: { label: 'Wasser erwärmen',  color: '--water',
+             text: 'Die Teilchen gleiten frei aneinander vorbei, halten aber noch zusammen. Mit der zugeführten Energie bewegen sie sich immer schneller – die Temperatur steigt.',
+             speed: ['steigt', 'up'], dist: ['bleiben etwa gleich', 'same'] },
+    boil:  { label: 'Sieden (100 °C)',  color: '--boil',
+             text: 'Die Temperatur bleibt bei 100 °C, die Teilchen werden nicht schneller. Die Energie überwindet die restlichen Anziehungskräfte: Teilchen verlassen die Flüssigkeit und fliegen frei durch den Raum, die Abstände werden sehr groß.',
+             speed: ['bleibt gleich', 'same'], dist: ['werden sehr groß, Anziehung wird überwunden', 'up'] },
+    steam: { label: 'Dampf erwärmen',   color: '--steam',
+             text: 'Die Teilchen fliegen frei durch den Raum, zwischen ihnen wirken kaum noch Anziehungskräfte. Mit der zugeführten Energie werden sie schneller – die Temperatur steigt.',
+             speed: ['steigt', 'up'], dist: ['bleiben sehr groß', 'same'] }
+  };
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d = 0) => n.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  function energyFromT(T) {
+    if (T <= 0) return m * C_ICE * T;
+    if (T <= 100) return m * L_F + m * C_WATER * T;
+    return m * L_F + m * C_WATER * 100 + m * L_V + m * C_STEAM * (T - 100);
+  }
+  function stateFromE(E) {
+    const qMelt = m * L_F, qWater = m * C_WATER * 100, qBoil = m * L_V;
+    if (E < 0) return { T: E / (m * C_ICE), ice: 1, water: 0, steam: 0, phase: 'ice' };
+    if (E < qMelt) { const f = E / qMelt; return { T: 0, ice: 1 - f, water: f, steam: 0, phase: 'melt' }; }
+    E -= qMelt;
+    if (E < qWater) return { T: E / (m * C_WATER), ice: 0, water: 1, steam: 0, phase: 'water' };
+    E -= qWater;
+    if (E < qBoil) { const f = E / qBoil; return { T: 100, ice: 0, water: 1 - f, steam: f, phase: 'boil' }; }
+    E -= qBoil;
+    return { T: 100 + E / (m * C_STEAM), ice: 0, water: 0, steam: 1, phase: 'steam' };
+  }
+
+  const E0 = energyFromT(T0), tEnd = (energyFromT(T_MAX) - E0) / P;
+  let t = 0, running = false, dragging = false, last = null, anim = 0, plot = { l: 52, w: 1 };
+
+  // Teilchentempo im Modell: hängt nur von der Temperatur ab (zur Verdeutlichung verstärkt)
+  const V_MAX = 150;
+  // stückweise linear: beim Eis besonders deutliche Zunahme der Schwingung
+  const SPEED_PTS = [[-20, 0.03], [0, 0.4], [100, 0.95], [110, 1]];
+  function speedRel(T) {
+    if (T <= SPEED_PTS[0][0]) return SPEED_PTS[0][1];
+    for (let i = 1; i < SPEED_PTS.length; i++) {
+      const [t1, v1] = SPEED_PTS[i - 1], [t2, v2] = SPEED_PTS[i];
+      if (T <= t2) return v1 + (v2 - v1) * (T - t1) / (t2 - t1);
+    }
+    return 1;
+  }
+
+  for (const p of Object.values(PHASES))
+    $('legend').insertAdjacentHTML('beforeend', `<span><i style="background:var(${p.color})"></i>${p.label}</span>`);
+
+  // ---------- Teilchenmodell ----------
+  const pc = $('particles');
+  const BW = 340, BH = 380;                               // logische Größe
+  const BOX = { l: 8, r: 332, t: 8, b: 320 };
+  const R = 8, D = 2 * R, SP = 25, COLS = 10, ROWS = 8, N = COLS * ROWS;
+  const lx0 = BOX.l + (BOX.r - BOX.l - COLS * SP) / 2 + SP / 2;
+
+  // Zufall mit festem Startwert, damit die Reihenfolge immer gleich ist
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  const parts = [];
+  for (let row = 0; row < ROWS; row++) for (let col = 0; col < COLS; col++) {
+    const sx = lx0 + col * SP, sy = BOX.b - SP / 2 - row * SP;
+    const edge = Math.min(ROWS - 1 - row, col, COLS - 1 - col);   // Abstand zum Rand des Kristalls
+    parts.push({ sx, sy, x: sx, y: sy, px: sx, py: sy, bx: sx, by: sy, col, row,
+                 mode: 'bound', ph1: rnd() * 6.3, ph2: rnd() * 6.3, fj: 0.85 + rnd() * 0.3, score: edge + rnd() * 1.6 });
+  }
+  // Teilchen am Rand lösen sich zuerst
+  [...parts].sort((a, b) => a.score - b.score).forEach((p, i) => p.rank = i);
+  const grid = {};
+  parts.forEach(p => grid[p.col + ',' + p.row] = p);
+
+  function stepParticles(dt, s) {
+    const vT = V_MAX * speedRel(s.T);
+    const nFree = Math.round((s.water + s.steam) * N), nGas = Math.round(s.steam * N);
+
+    for (const p of parts) {
+      const mode = p.rank < nGas ? 'gas' : p.rank < nFree ? 'liquid' : 'bound';
+      if (mode !== p.mode) {
+        if (p.mode === 'bound') {                       // löst sich vom Gitter
+          const a = rnd() * Math.PI * 2, h = dt / 3;
+          p.px = p.x - Math.cos(a) * vT * h; p.py = p.y - Math.sin(a) * vT * h;
+        }
+        if (mode === 'bound') { p.bx = p.x; p.by = p.y; }   // kehrt zurück (Zurückspulen)
+        if (mode === 'gas' && p.mode === 'liquid') {     // verlässt die Flüssigkeit nach oben
+          const h = dt / 3, ang = rnd() * Math.PI * 2;
+          p.px = p.x - Math.cos(ang) * vT * h; p.py = p.y - Math.sin(ang) * vT * h;
+        }
+        p.mode = mode;
+      }
+    }
+
+    // gebundene Teilchen schwingen um ihren Platz
+    // Im Eis wachsen Schwingungsweite UND Schwingungsfrequenz mit der Temperatur
+    const u = Math.min(1, Math.max(0, (vT / V_MAX - SPEED_PTS[0][1]) / (SPEED_PTS[1][1] - SPEED_PTS[0][1])));
+    const omega = 4 + 12 * u;                 // rad/s: langsames Zittern -> schnelles Schwingen
+    const A = 0.9 * vT / omega;               // so ist das Tempo = Weite x Frequenz
+    for (const p of parts) if (p.mode === 'bound') {
+      const k = Math.min(1, dt * 5);
+      p.bx += (p.sx - p.bx) * k; p.by += (p.sy - p.by) * k;
+      p.ph1 += omega * p.fj * dt; p.ph2 += omega * p.fj * 1.27 * dt;
+      p.x = p.bx + A * Math.sin(p.ph1);
+      p.y = p.by + A * Math.sin(p.ph2);
+      p.px = p.x; p.py = p.y;
+    }
+
+    // Oberfläche der Flüssigkeit: Höhe aus dem Platzbedarf der Teilchen.
+    // Flüssigkeit braucht etwas mehr Platz pro Teilchen als das Eisgitter (größere Abstände),
+    // aber deutlich weniger als Dampf. Die Teilchen sind dabei immer ungeordnet.
+    let nLiq = 0, nBound = 0;
+    for (const p of parts) { if (p.mode === 'liquid') nLiq++; else if (p.mode === 'bound') nBound++; }
+    const surf = BOX.b - (nLiq * 520 + nBound * SP * SP) / (BOX.r - BOX.l);
+
+    // freie Teilchen: Verlet-Integration in Teilschritten
+    const SUB = 3, h = dt / SUB;
+    for (let sub = 0; sub < SUB; sub++) {
+      for (const p of parts) {
+        if (p.mode === 'bound') continue;
+        const noise = p.mode === 'gas' ? 3000 : 2500;
+        let ax = (rnd() - 0.5) * noise, ay = (rnd() - 0.5) * noise;
+        // Zusammenhalt der Flüssigkeit: oberhalb der Oberfläche zurück nach unten
+        if (p.mode === 'liquid' && p.y < surf + R) ay += 6000 * Math.min(1, (surf + R - p.y) / 12);
+        p.ax = ax; p.ay = ay;
+      }
+      for (const p of parts) {
+        if (p.mode === 'bound') continue;
+        const vx = p.x - p.px, vy = p.y - p.py;
+        p.px = p.x; p.py = p.y;
+        p.x += vx + p.ax * h * h; p.y += vy + p.ay * h * h;
+      }
+      // Stöße: Teilchen überlappen nicht
+      for (let it = 0; it < 2; it++) {
+        for (let i = 0; i < N; i++) {
+          const a = parts[i];
+          for (let j = i + 1; j < N; j++) {
+            const b = parts[j];
+            if (a.mode === 'bound' && b.mode === 'bound') continue;
+            const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+            if (d2 >= D * D || d2 === 0) continue;
+            const d = Math.sqrt(d2), o = D - d, ux = dx / d, uy = dy / d;
+            // elastischer Stoß: Geschwindigkeit entlang der Verbindungslinie austauschen
+            const va = a.mode === 'bound' ? 0 : (a.x - a.px) * ux + (a.y - a.py) * uy;
+            const vb = b.mode === 'bound' ? 0 : (b.x - b.px) * ux + (b.y - b.py) * uy;
+            const rel = vb - va;                                  // < 0: Teilchen nähern sich
+            if (a.mode === 'bound') {
+              b.x += ux * o; b.y += uy * o; b.px += ux * o; b.py += uy * o;
+              if (rel < 0) { b.px += 2 * rel * ux; b.py += 2 * rel * uy; }
+            } else if (b.mode === 'bound') {
+              a.x -= ux * o; a.y -= uy * o; a.px -= ux * o; a.py -= uy * o;
+              if (rel < 0) { a.px -= 2 * rel * ux; a.py -= 2 * rel * uy; }
+            } else {
+              a.x -= ux * o / 2; a.y -= uy * o / 2; a.px -= ux * o / 2; a.py -= uy * o / 2;
+              b.x += ux * o / 2; b.y += uy * o / 2; b.px += ux * o / 2; b.py += uy * o / 2;
+              if (rel < 0) { a.px -= rel * ux; a.py -= rel * uy; b.px += rel * ux; b.py += rel * uy; }
+            }
+          }
+        }
+      }
+      // Wände
+      for (const p of parts) {
+        if (p.mode === 'bound') continue;
+        const vx = p.x - p.px, vy = p.y - p.py;
+        if (p.x < BOX.l + R) { p.x = BOX.l + R; p.px = p.x + vx; }
+        if (p.x > BOX.r - R) { p.x = BOX.r - R; p.px = p.x + vx; }
+        if (p.y < BOX.t + R) { p.y = BOX.t + R; p.py = p.y + vy; }
+        if (p.y > BOX.b - R) { p.y = BOX.b - R; p.py = p.y + vy; }
+      }
+      // Thermostat: Tempo der freien Teilchen folgt der Temperatur
+      for (const p of parts) {
+        if (p.mode === 'bound') continue;
+        let vx = p.x - p.px, vy = p.y - p.py, v = Math.hypot(vx, vy);
+        const target = vT * h;
+        if (v < 1e-6) { const a = rnd() * 6.3; vx = Math.cos(a); vy = Math.sin(a); v = 1; }
+        const f = 1 + (target / v - 1) * 0.2;
+        // Richtung leicht zufällig drehen (ungeordnete Wärmebewegung)
+        const rot = (rnd() - 0.5) * (p.mode === 'gas' ? 0.5 : 0.3), c = Math.cos(rot), sn = Math.sin(rot);
+        const nx = (vx * c - vy * sn) * f, ny = (vx * sn + vy * c) * f;
+        p.px = p.x - nx; p.py = p.y - ny;
+      }
+    }
+  }
+
+  function drawParticles() {
+    const W = pc.clientWidth, H = pc.clientHeight, dpr = window.devicePixelRatio || 1;
+    pc.width = W * dpr; pc.height = H * dpr;
+    const ctx = pc.getContext('2d');
+    const k = Math.min(W / BW, H / BH);
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (W - BW * k) / 2, 0);
+
+    // Behälter
+    ctx.fillStyle = css('--bg');
+    ctx.fillRect(BOX.l, BOX.t, BOX.r - BOX.l, BOX.b - BOX.t);
+    ctx.strokeStyle = css('--glass'); ctx.lineWidth = 3;
+    ctx.strokeRect(BOX.l, BOX.t, BOX.r - BOX.l, BOX.b - BOX.t);
+
+    // Anziehungskräfte als gestrichelte Linien (nur im Zwischenraum zwischen den Teilchen)
+    const bond = (a, b) => {
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d <= 2 * R + 1) return;
+      const ux = dx / d, uy = dy / d;
+      ctx.moveTo(a.x + ux * R, a.y + uy * R); ctx.lineTo(b.x - ux * R, b.y - uy * R);
+    };
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = css('--muted');
+    // Eis: feste Bindungen zu den Gitternachbarn
+    ctx.setLineDash([3, 2.5]); ctx.globalAlpha = 0.8; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (const p of parts) {
+      if (p.mode !== 'bound') continue;
+      for (const n of [grid[(p.col + 1) + ',' + p.row], grid[p.col + ',' + (p.row + 1)]]) {
+        if (n && n.mode === 'bound') bond(p, n);
+      }
+    }
+    ctx.stroke();
+    // Wasser: schwächere, ständig wechselnde Anziehung zwischen nahen Teilchen
+    ctx.setLineDash([2.5, 2.5]); ctx.globalAlpha = 0.55; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const a = parts[i];
+      if (a.mode === 'gas') continue;
+      for (let j = i + 1; j < N; j++) {
+        const b = parts[j];
+        if (b.mode === 'gas' || (a.mode === 'bound' && b.mode === 'bound')) continue;
+        if (Math.hypot(b.x - a.x, b.y - a.y) < SP * 1.2) bond(a, b);
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    // Teilchen
+    const pcol = css('--particle');   // alle Teilchen sind gleich: Wasserteilchen
+    for (const p of parts) {
+      ctx.fillStyle = pcol;
+      ctx.beginPath(); ctx.arc(p.x, p.y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath(); ctx.arc(p.x - 2.5, p.y - 2.5, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    drawFlame(ctx);
+  }
+
+  function drawFlame(ctx) {
+    const metal = css('--glass'), cx = BW / 2, tubeTop = 350;
+    ctx.fillStyle = metal;
+    ctx.fillRect(cx - 6, tubeTop, 12, 26);
+    ctx.fillRect(cx - 24, 372, 48, 7);
+    ctx.fillRect(cx - 8, tubeTop - 3, 16, 4);
+    if (!running && !dragging) return;
+    const base = tubeTop - 2;
+    const fl = Math.sin(anim * 17) * 2.5 + Math.sin(anim * 29 + 1) * 1.5;
+    const hgt = 26 + fl, w = 11, tipX = cx + Math.sin(anim * 11) * 2;
+    const g = ctx.createLinearGradient(0, base, 0, base - hgt);
+    g.addColorStop(0, 'rgba(255,170,40,0.95)'); g.addColorStop(0.5, 'rgba(255,120,20,0.85)'); g.addColorStop(1, 'rgba(230,60,10,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.6, base);
+    ctx.bezierCurveTo(cx - w * 1.2, base - hgt * 0.35, tipX - w * 0.5, base - hgt * 0.75, tipX, base - hgt);
+    ctx.bezierCurveTo(tipX + w * 0.5, base - hgt * 0.75, cx + w * 1.2, base - hgt * 0.35, cx + w * 0.6, base);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(40,110,255,0.9)';
+    ctx.beginPath(); ctx.moveTo(cx - 4, base);
+    ctx.quadraticCurveTo(cx - 4, base - 8, cx, base - 12); ctx.quadraticCurveTo(cx + 4, base - 8, cx + 4, base);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ---------- Anzeigen ----------
+  function update(s) {
+    $('rT').textContent = fmt(s.T, 1).replace('-', '−') + ' °C';
+    $('rt').textContent = fmt(t / 60, 1) + ' min';
+    $('rQ').textContent = fmt(P * t / 1000, 0) + ' kJ';
+    const sr = speedRel(s.T);
+    $('fSpeed').style.height = (sr * 100) + '%';
+    $('pSpeed').textContent = fmt(sr * 100) + ' %';
+    for (const [k, key] of [['Ice', 'ice'], ['Water', 'water'], ['Steam', 'steam']]) {
+      $('f' + k).style.height = (s[key] * 100) + '%';
+      $('p' + k).textContent = fmt(s[key] * 100) + ' %';
+    }
+    const ph = PHASES[s.phase];
+    $('phase').textContent = ph.label; $('phase').style.background = css(ph.color);
+    $('iSpeed').textContent = ph.speed[0]; $('iSpeed').className = ph.speed[1];
+  }
+
+  // ---------- Diagramm ----------
+  const gc = $('graph');
+  function drawGraph() {
+    const W = gc.clientWidth, H = gc.clientHeight, dpr = window.devicePixelRatio || 1;
+    gc.width = W * dpr; gc.height = H * dpr;
+    const ctx = gc.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = { l: 52, r: 10, t: 10, b: 36 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const X = tt => pad.l + (tt / tEnd) * pw;
+    const Y = T => pad.t + (1 - (T - Y_MIN) / (Y_MAX - Y_MIN)) * ph;
+    plot = { l: pad.l, w: pw };
+    ctx.font = '12px system-ui, sans-serif';
+
+    ctx.strokeStyle = css('--grid'); ctx.fillStyle = css('--muted'); ctx.lineWidth = 1;
+    ctx.textAlign = 'center';
+    const spanMin = tEnd / 60, stepMin = spanMin > 30 ? 5 : spanMin > 12 ? 2 : 1;
+    for (let v = 0; v <= spanMin + 1e-9; v += stepMin) {
+      const x = X(v * 60);
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
+      ctx.fillText(v, x, pad.t + ph + 16);
+    }
+    ctx.fillText('Zeit in min', pad.l + pw / 2, H - 4);
+    ctx.textAlign = 'right';
+    for (let T = -40; T <= Y_MAX; T += 20) {
+      const y = Y(T);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.fillText(T + ' °C', pad.l - 6, y + 4);
+    }
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = css('--glass');
+    for (const T of [0, 100]) { ctx.beginPath(); ctx.moveTo(pad.l, Y(T)); ctx.lineTo(pad.l + pw, Y(T)); ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    const NS = 600;
+    ctx.strokeStyle = css('--line'); ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i <= NS; i++) {
+      const tt = tEnd * i / NS, y = Y(stateFromE(E0 + P * tt).T);
+      i ? ctx.lineTo(X(tt), y) : ctx.moveTo(X(tt), y);
+    }
+    ctx.stroke();
+
+    if (t > 0) {
+      ctx.lineWidth = 4; ctx.lineCap = 'round';
+      const n = Math.max(2, Math.round(NS * t / tEnd));
+      let px = X(0), py = Y(T0);
+      for (let i = 1; i <= n; i++) {
+        const tt = t * i / n, s = stateFromE(E0 + P * tt), x = X(tt), y = Y(s.T);
+        ctx.strokeStyle = css(PHASES[s.phase].color);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+        px = x; py = y;
+      }
+    }
+    const cur = stateFromE(E0 + P * t);
+    ctx.fillStyle = css(PHASES[cur.phase].color);
+    ctx.beginPath(); ctx.arc(X(t), Y(cur.T), 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = css('--card'); ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  // ---------- Ablauf ----------
+  function speedFactor() { return Math.pow(500, +$('speed').value / 100); }
+  function showSpeed() {
+    const f = speedFactor();
+    $('speedOut').textContent = (f < 10 ? fmt(f, 1) : fmt(Math.round(f / 5) * 5)) + '×';
+  }
+
+  function loop(ts) {
+    const dt = last === null ? 1 / 60 : Math.min(1 / 30, (ts - last) / 1000);
+    last = ts; anim = ts / 1000;
+    if (running) {
+      t += dt * speedFactor();
+      if (t >= tEnd) { t = tEnd; running = false; $('play').textContent = 'Start'; }
+    }
+    const s = stateFromE(E0 + P * t);
+    stepParticles(dt, s);          // Teilchen bewegen sich immer – auch bei Pause
+    update(s); drawGraph(); drawParticles();
+    requestAnimationFrame(loop);
+  }
+
+  $('play').addEventListener('click', () => {
+    if (t >= tEnd) t = 0;
+    running = !running;
+    $('play').textContent = running ? 'Pause' : 'Weiter';
+  });
+  $('reset').addEventListener('click', () => { running = false; t = 0; $('play').textContent = 'Start'; });
+  $('speed').addEventListener('input', showSpeed);
+
+  function scrubTo(ev) {
+    const r = gc.getBoundingClientRect();
+    const k = r.width / gc.clientWidth;                  // Skalierung berücksichtigen
+    t = Math.min(tEnd, Math.max(0, ((ev.clientX - r.left) / k - plot.l) / plot.w * tEnd));
+  }
+  gc.addEventListener('pointerdown', ev => {
+    dragging = true; running = false; gc.setPointerCapture(ev.pointerId); scrubTo(ev);
+  });
+  gc.addEventListener('pointermove', ev => { if (dragging) scrubTo(ev); });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false; $('play').textContent = t > 0 && t < tEnd ? 'Weiter' : 'Start';
+  };
+  gc.addEventListener('pointerup', endDrag);
+  gc.addEventListener('pointercancel', endDrag);
+
+  // Auf Bildschirmgröße einpassen (Hoch- und Querformat)
+  const wrapEl = document.querySelector('.wrap');
+  // Erklärtexte sind je nach Phase unterschiedlich lang: Platz für den längsten reservieren,
+  // damit sich die Größe beim Phasenwechsel nicht ändert.
+  const textEl = $('text'), explainEl = document.querySelector('.explain');
+  if (textEl && explainEl) {
+    let maxH = 0;
+    for (const ph of Object.values(PHASES)) { textEl.textContent = ph.text; maxH = Math.max(maxH, explainEl.offsetHeight); }
+    explainEl.style.minHeight = maxH + 'px';
+  }
+  function fit() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const h = wrapEl.offsetHeight;
+    const scale = Math.min(vw / 1240, vh / h);
+    const x = (vw - 1240 * scale) / 2, y = Math.max(0, (vh - h * scale) / 2);
+    wrapEl.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 200));
+  fit();
+
+  showSpeed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
